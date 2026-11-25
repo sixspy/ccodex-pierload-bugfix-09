@@ -271,7 +271,7 @@ TICKETS = r"""
 export const ticketsViewTemplate = `
 <section class="panel">
   <h2>过磅票采集</h2>
-  <p class="hint">录入各轴重 JSON；超重自动旁路挂起并开超重记录。</p>
+  <p class="hint">录入各轴重 JSON；毛重超地磅额载即拒写不落正式票，超车道阈值才自动旁路挂起——额载与阈值两边不得混用。</p>
   <div class="form-row">
     <div><label>车道</label>
       <select v-model.number="ticketForm.lane_id">
@@ -293,11 +293,12 @@ export const ticketsViewTemplate = `
     <button class="secondary" @click="refresh">刷新</button>
   </div>
   <table class="data-table">
-    <thead><tr><th>票号</th><th>车道</th><th>提单</th><th>毛重</th><th>状态</th><th>代</th><th></th></tr></thead>
+    <thead><tr><th>票号</th><th>车道</th><th>地磅额载</th><th>提单</th><th>毛重</th><th>状态</th><th>代</th><th></th></tr></thead>
     <tbody>
       <tr v-for="t in tickets" :key="t.id" @click="selectTicket(t)">
         <td>{{ t.ticket_code }}</td>
         <td>{{ t.lane_code }}</td>
+        <td>{{ t.max_gross_t }}t</td>
         <td>{{ t.bl_ref }}</td>
         <td>{{ fmtT(t.gross_t) }}</td>
         <td><span class="badge" :class="ticketClass(t.status)">{{ t.status }}</span></td>
@@ -316,7 +317,7 @@ OVERLOAD = r"""
 export const overloadViewTemplate = `
 <section class="panel">
   <h2>超重旁路</h2>
-  <p class="hint">开放挂起驶向旁路；闭环后票态回到已裁定方可放行。</p>
+  <p class="hint">开放挂起驶向旁路；闭环后票态回到已裁定方可放行。阈值列取车道超限阈值，额载列取所在地磅额载；超地磅额载的读数一律拒写，不得挂起。</p>
   <div class="form-row">
     <div><label>过磅票</label>
       <select v-model.number="overloadOpenForm.ticket_id">
@@ -330,13 +331,15 @@ export const overloadViewTemplate = `
     <button class="secondary" @click="refresh">刷新</button>
   </div>
   <table class="data-table">
-    <thead><tr><th>键</th><th>票号</th><th>超重</th><th>阈值</th><th>状态</th><th></th></tr></thead>
+    <thead><tr><th>键</th><th>票号</th><th>地磅</th><th>超重</th><th>阈值</th><th>地磅额载</th><th>状态</th><th></th></tr></thead>
     <tbody>
       <tr v-for="h in overloads" :key="h.id">
         <td class="mono">{{ h.hold_key }}</td>
         <td>{{ h.ticket_code }}</td>
+        <td>{{ h.bridge_code }}</td>
         <td>{{ h.overweight_t }}t</td>
         <td>{{ h.threshold_t }}t</td>
+        <td>{{ h.max_gross_t }}t</td>
         <td><span class="badge" :class="h.status==='开放'?'fail':'pass'">{{ h.status }}</span></td>
         <td>
           <button v-if="h.status==='开放'" class="mini-btn" @click="closeOverload(h.id)">闭环</button>
@@ -484,7 +487,7 @@ export const reconcileViewTemplate = `
 <section class="grid-2">
   <section class="panel">
     <h2>提单对账</h2>
-    <p class="hint">汇总过磅毛重与提单申报吨比对。</p>
+    <p class="hint">汇总过磅毛重与提单申报吨比对；超额票（毛重超所在地磅额载）单列，不计可出证明。</p>
     <div class="form-row">
       <div><label>提单号</label><input v-model="reconCode"/></div>
     </div>
@@ -495,6 +498,7 @@ export const reconcileViewTemplate = `
     <div v-if="reconOne" class="detail-box">
       <p>申报 {{ reconOne.declared_gross_t }}t · 过磅合计 {{ reconOne.ticket_sum_t }}t</p>
       <p :class="reconOne.balanced ? 'ok' : 'bad'">{{ reconOne.balanced ? '账实平衡' : '偏差待查' }}</p>
+      <p :class="reconOne.cap_ok ? 'ok' : 'bad'">额载校验 {{ reconOne.cap_ok ? '通过' : '超额票 ' + (reconOne.cap_violations||[]).join('、') }}</p>
       <p>快照数 {{ reconOne.seal_count }} · 可出证明 {{ reconOne.proof_ready ? '是' : '否' }}</p>
     </div>
     <ul v-if="reconAllItems.length">
@@ -928,7 +932,7 @@ LANES = r"""
 export const lanesViewTemplate = `
 <section class="panel">
   <h2>过磅车道</h2>
-  <p class="hint">每车道配置超限阈值与旁路引用；进闸方向与出闸方向分开编码。</p>
+  <p class="hint">每车道配置超限阈值与旁路引用；进闸方向与出闸方向分开编码。超限阈值只管旁路挂起，额载禁入只认所属地磅额载，两边不得混用。</p>
   <div class="form-row">
     <div><label>车道编码</label><input v-model="laneForm.lane_code"/></div>
     <div><label>所属地磅</label>
@@ -945,13 +949,14 @@ export const lanesViewTemplate = `
     <button class="secondary" @click="refresh">刷新</button>
   </div>
   <table class="data-table">
-    <thead><tr><th>车道</th><th>地磅</th><th>方向</th><th>阈值</th><th>旁路</th><th>状态</th></tr></thead>
+    <thead><tr><th>车道</th><th>地磅</th><th>方向</th><th>阈值</th><th>地磅额载</th><th>旁路</th><th>状态</th></tr></thead>
     <tbody>
       <tr v-for="l in lanes" :key="l.id">
         <td>{{ l.lane_code }}</td>
         <td>{{ l.bridge_code }}</td>
         <td>{{ l.direction }}</td>
         <td>{{ l.overload_threshold_t }}t</td>
+        <td>{{ l.max_gross_t }}t</td>
         <td>{{ l.side_lane_ref || '—' }}</td>
         <td><span class="badge pass">{{ l.status }}</span></td>
       </tr>

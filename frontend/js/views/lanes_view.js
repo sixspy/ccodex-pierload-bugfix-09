@@ -1,7 +1,7 @@
 export const lanesViewTemplate = `
 <section class="panel">
   <h2>过磅车道</h2>
-  <p class="hint">每车道配置超限阈值与旁路引用；进闸方向与出闸方向分开编码。</p>
+  <p class="hint">每车道配置超限阈值与旁路引用；进闸方向与出闸方向分开编码。超限阈值只管旁路挂起，额载禁入只认所属地磅额载，两边不得混用。</p>
   <div class="form-row">
     <div><label>车道编码</label><input v-model="laneForm.lane_code"/></div>
     <div><label>所属地磅</label>
@@ -18,13 +18,14 @@ export const lanesViewTemplate = `
     <button class="secondary" @click="refresh">刷新</button>
   </div>
   <table class="data-table">
-    <thead><tr><th>车道</th><th>地磅</th><th>方向</th><th>阈值</th><th>旁路</th><th>状态</th></tr></thead>
+    <thead><tr><th>车道</th><th>地磅</th><th>方向</th><th>阈值</th><th>地磅额载</th><th>旁路</th><th>状态</th></tr></thead>
     <tbody>
       <tr v-for="l in lanes" :key="l.id">
         <td>{{ l.lane_code }}</td>
         <td>{{ l.bridge_code }}</td>
         <td>{{ l.direction }}</td>
         <td>{{ l.overload_threshold_t }}t</td>
+        <td>{{ l.max_gross_t }}t</td>
         <td>{{ l.side_lane_ref || '—' }}</td>
         <td><span class="badge pass">{{ l.status }}</span></td>
       </tr>

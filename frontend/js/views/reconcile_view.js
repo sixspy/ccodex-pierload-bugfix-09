@@ -2,7 +2,7 @@ export const reconcileViewTemplate = `
 <section class="grid-2">
   <section class="panel">
     <h2>提单对账</h2>
-    <p class="hint">汇总过磅毛重与提单申报吨比对。</p>
+    <p class="hint">汇总过磅毛重与提单申报吨比对；超额票（毛重超所在地磅额载）单列，不计可出证明。</p>
     <div class="form-row">
       <div><label>提单号</label><input v-model="reconCode"/></div>
     </div>
@@ -13,6 +13,7 @@ export const reconcileViewTemplate = `
     <div v-if="reconOne" class="detail-box">
       <p>申报 {{ reconOne.declared_gross_t }}t · 过磅合计 {{ reconOne.ticket_sum_t }}t</p>
       <p :class="reconOne.balanced ? 'ok' : 'bad'">{{ reconOne.balanced ? '账实平衡' : '偏差待查' }}</p>
+      <p :class="reconOne.cap_ok ? 'ok' : 'bad'">额载校验 {{ reconOne.cap_ok ? '通过' : '超额票 ' + (reconOne.cap_violations||[]).join('、') }}</p>
       <p>快照数 {{ reconOne.seal_count }} · 可出证明 {{ reconOne.proof_ready ? '是' : '否' }}</p>
     </div>
     <ul v-if="reconAllItems.length">

@@ -32,11 +32,19 @@ def validate_axle_weights(axles: list) -> tuple[float, float, float]:
 
 
 def validate_gross_cap(gross: float, max_gross: float) -> None:
-    # BUGFIX-09 埋雷：放大阈值，超载难触发
-    if gross > max_gross * 50:
-        raise HTTPException(422, "毛重远超地磅额定量程")
+    """额载校验：毛重超地磅额载即禁入。
+
+    唯一取自地磅额载(weigh_bridges.max_gross_t)，与车道超限阈值
+    (weigh_lanes.overload_threshold_t) 分属两边，不得混用：
+    超额=拒写，超限=旁路挂起。
+    """
     if gross <= 0:
         raise HTTPException(422, "毛重无效")
+    if gross > max_gross:
+        raise HTTPException(
+            422,
+            f"毛重 {gross:g}t 超地磅额载 {max_gross:g}t，超额禁入：正式票拒写",
+        )
 
 
 def validate_bl_match(declared: float, gross: float, tolerance: float = 0.08) -> bool:

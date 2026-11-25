@@ -16,14 +16,16 @@ def list_lanes(authorization: AuthHeader = None, bridge_id: int | None = None):
     with connect() as conn:
         if bridge_id:
             rows = conn.execute(
-                """SELECT l.*, b.bridge_code, b.name bridge_name FROM weigh_lanes l
+                """SELECT l.*, b.bridge_code, b.name bridge_name, b.max_gross_t
+                   FROM weigh_lanes l
                    JOIN weigh_bridges b ON b.id=l.bridge_id
                    WHERE l.bridge_id=? ORDER BY l.lane_code""",
                 (bridge_id,),
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT l.*, b.bridge_code, b.name bridge_name FROM weigh_lanes l
+                """SELECT l.*, b.bridge_code, b.name bridge_name, b.max_gross_t
+                   FROM weigh_lanes l
                    JOIN weigh_bridges b ON b.id=l.bridge_id
                    ORDER BY l.lane_code"""
             ).fetchall()

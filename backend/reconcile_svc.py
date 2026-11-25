@@ -43,8 +43,12 @@ def _reconcile_bl(conn, bl_code: str) -> dict:
         "SELECT * FROM bl_manifests WHERE bl_code=?", (bl_code,)
     ).fetchone()
     tickets = conn.execute(
-        """SELECT ticket_code, gross_t, status, generation FROM weigh_tickets
-           WHERE bl_ref=? AND status NOT IN ('作废')""",
+        """SELECT t.ticket_code, t.gross_t, t.status, t.generation,
+                  b.bridge_code, b.max_gross_t
+           FROM weigh_tickets t
+           JOIN weigh_lanes l ON l.id=t.lane_id
+           JOIN weigh_bridges b ON b.id=l.bridge_id
+           WHERE t.bl_ref=? AND t.status NOT IN ('作废')""",
         (bl_code,),
     ).fetchall()
     if not tickets:
@@ -59,18 +63,26 @@ def _reconcile_bl(conn, bl_code: str) -> dict:
     ticket_sum = round(sum(float(t["gross_t"]) for t in tickets), 3)
     declared = float(bl["declared_gross_t"])
     matched = validate_bl_match(declared, ticket_sum, tolerance=0.1)
+    # 额载同源：与过磅/车道/地磅页同取地磅额载字段，超额票不计入正式对账
+    over_cap = [
+        t["ticket_code"]
+        for t in tickets
+        if float(t["gross_t"]) > float(t["max_gross_t"])
+    ]
     seal_rows = conn.execute(
         """SELECT s.seal_ref, s.ticket_generation, t.ticket_code
            FROM gate_seals s JOIN weigh_tickets t ON t.id=s.ticket_id
            WHERE t.bl_ref=?""",
         (bl_code,),
     ).fetchall()
-    proof_ok = matched and len(seal_rows) >= 1
+    proof_ok = matched and len(seal_rows) >= 1 and not over_cap
     return {
         "bl_code": bl_code,
         "declared_gross_t": declared,
         "ticket_sum_t": ticket_sum,
         "balanced": matched,
+        "cap_violations": over_cap,
+        "cap_ok": not over_cap,
         "proof_ready": proof_ok,
         "seal_count": len(seal_rows),
         "tickets": [dict(t) for t in tickets],

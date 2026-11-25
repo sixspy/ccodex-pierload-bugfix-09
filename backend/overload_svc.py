@@ -7,7 +7,11 @@ from auth import AuthHeader, require_user, require_writer
 from db import connect, now_iso, write_audit
 from locks import release, require_lock
 from models import OverloadCloseIn, OverloadOpenIn
-from validators import adjudicate_overload, validate_ticket_mutable
+from validators import (
+    adjudicate_overload,
+    validate_gross_cap,
+    validate_ticket_mutable,
+)
 
 router = APIRouter(tags=["overload"])
 
@@ -16,8 +20,12 @@ router = APIRouter(tags=["overload"])
 def list_overloads(authorization: AuthHeader = None, status: str | None = None):
     require_user(authorization)
     with connect() as conn:
-        q = """SELECT h.*, t.ticket_code, t.vehicle_plate, t.gross_t
-               FROM overload_holds h JOIN weigh_tickets t ON t.id=h.ticket_id"""
+        q = """SELECT h.*, t.ticket_code, t.vehicle_plate, t.gross_t,
+                      b.bridge_code, b.max_gross_t
+               FROM overload_holds h
+               JOIN weigh_tickets t ON t.id=h.ticket_id
+               JOIN weigh_lanes l ON l.id=t.lane_id
+               JOIN weigh_bridges b ON b.id=l.bridge_id"""
         if status:
             rows = conn.execute(
                 q + " WHERE h.status=? ORDER BY h.id DESC", (status,)
@@ -35,13 +43,17 @@ def open_overload(body: OverloadOpenIn, authorization: AuthHeader = None):
         require_lock(conn, lock_key, user)
         try:
             ticket = conn.execute(
-                """SELECT t.*, l.overload_threshold_t FROM weigh_tickets t
-                   JOIN weigh_lanes l ON l.id=t.lane_id WHERE t.id=?""",
+                """SELECT t.*, l.overload_threshold_t, b.bridge_code, b.max_gross_t
+                   FROM weigh_tickets t
+                   JOIN weigh_lanes l ON l.id=t.lane_id
+                   JOIN weigh_bridges b ON b.id=l.bridge_id WHERE t.id=?""",
                 (body.ticket_id,),
             ).fetchone()
             if not ticket:
                 raise HTTPException(404, "过磅票不存在")
             validate_ticket_mutable(dict(ticket))
+            # 超额禁入：挂起入口也不得为超地磅额载的读数开挂起（口径封死）
+            validate_gross_cap(float(ticket["gross_t"]), float(ticket["max_gross_t"]))
             open_one = conn.execute(
                 """SELECT id FROM overload_holds WHERE ticket_id=? AND status='开放'""",
                 (body.ticket_id,),
